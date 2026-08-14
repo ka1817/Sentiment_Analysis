@@ -4,3 +4,5 @@ openpyxl
 scikit-learn 
 matplotlib
 tensorflow
+imblearn
+nltk
