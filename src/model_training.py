@@ -8,7 +8,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import GridSearchCV, train_test_split
-from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
@@ -60,7 +59,6 @@ class ModelTraining:
     def split_data(self, df: pd.DataFrame):
         """Preprocess labels and split dataset into training and testing sets."""
         try:
-            # Add sentiment labels first
             df = self.add_sentiment_label(df)
             
             logger.info("Splitting dataset into train and test sets")
@@ -89,20 +87,23 @@ class ModelTraining:
             raise e
 
     def get_pipelines_and_grids(self):
+        """Define explicit Pipelines and Hyperparameter Grids for multiple models."""
         
-        nb_pipeline = Pipeline([
-            ("tfidf", TfidfVectorizer()),
-            ("classifier", MultinomialNB())
+        # 1. Random Forest Pipeline & Grid
+        rf_pipeline = Pipeline([
+            ("tfidf", TfidfVectorizer(lowercase=True, sublinear_tf=True)),
+            ("classifier", RandomForestClassifier(random_state=self.config.random_state, n_jobs=-1, class_weight="balanced"))
         ])
-        nb_params = {
-            "tfidf__max_df": [0.85, 1.0],
+        rf_params = {
             "tfidf__ngram_range": [(1, 1), (1, 2)],
-            "classifier__alpha": [0.1, 0.5, 1.0]
+            "classifier__n_estimators": [50, 100],
+            "classifier__max_depth": [None, 10, 20]
         }
 
+        # 2. Support Vector Classifier (SVC) Pipeline & Grid
         svc_pipeline = Pipeline([
-            ("tfidf", TfidfVectorizer()),
-            ("classifier", SVC(random_state=self.config.random_state))
+            ("tfidf", TfidfVectorizer(lowercase=True, sublinear_tf=True)),
+            ("classifier", SVC(random_state=self.config.random_state, probability=True, class_weight="balanced"))
         ])
         svc_params = {
             "tfidf__ngram_range": [(1, 1), (1, 2)],
@@ -110,60 +111,36 @@ class ModelTraining:
             "classifier__kernel": ["linear", "rbf"]
         }
 
-        rf_pipeline = Pipeline([
-            ("tfidf", TfidfVectorizer()),
-            ("classifier", RandomForestClassifier(random_state=self.config.random_state))
-        ])
-        rf_params = {
-            "tfidf__ngram_range": [(1, 1)],
-            "classifier__n_estimators": [50, 100],
-            "classifier__max_depth": [None, 10, 20]
-        }
-
+        # 3. Decision Tree Pipeline & Grid
         dt_pipeline = Pipeline([
-            ("tfidf", TfidfVectorizer()),
-            ("classifier", DecisionTreeClassifier(random_state=self.config.random_state))
+            ("tfidf", TfidfVectorizer(lowercase=True, sublinear_tf=True)),
+            ("classifier", DecisionTreeClassifier(random_state=self.config.random_state, class_weight="balanced"))
         ])
         dt_params = {
-            "tfidf__ngram_range": [(1, 1)],
+            "tfidf__ngram_range": [(1, 1), (1, 2)],
             "classifier__max_depth": [None, 10, 20],
             "classifier__criterion": ["gini", "entropy"]
         }
 
         models = {
-            "Naive Bayes": (nb_pipeline, nb_params),
-            "SVC": (svc_pipeline, svc_params),
             "Random Forest": (rf_pipeline, rf_params),
+            "SVC": (svc_pipeline, svc_params),
             "Decision Tree": (dt_pipeline, dt_params)
         }
 
         return models
 
-    def save_model(self, model):
+    def train_and_tune_pipelines(self, X_train, y_train, X_test, y_test):
+        """Iterate through models, tune them via GridSearchCV, evaluate, and save the best overall pipeline."""
         try:
-            model_dir_path = Path(self.config.model_dir)
-            model_dir_path.mkdir(parents=True, exist_ok=True)
-            
-            file_path = model_dir_path / self.config.model_file_name
-            
-            logger.info(f"Saving best model to {file_path}")
-            joblib.dump(model, file_path)
-            logger.info("Model saved successfully")
-            
-        except Exception as e:
-            logger.exception("Error occurred while saving the model")
-            raise e
+            models = self.get_pipelines_and_grids()
+            best_overall_pipeline = None
+            best_score = 0.0
+            best_model_name = ""
 
-    def train_and_tune_models(self, X_train, y_train, X_test, y_test):
-        """Train models using GridSearchCV, evaluate them, and save the best one."""
-        models = self.get_pipelines_and_grids()
-        best_overall_model = None
-        best_score = 0.0
-        best_model_name = ""
-
-        for name, (pipeline, params) in models.items():
-            logger.info(f"Starting hyperparameter tuning for: {name}")
-            try:
+            for name, (pipeline, params) in models.items():
+                logger.info(f"Starting hyperparameter tuning for: {name}")
+                
                 grid_search = GridSearchCV(
                     estimator=pipeline,
                     param_grid=params,
@@ -174,7 +151,8 @@ class ModelTraining:
                 )
 
                 grid_search.fit(X_train, y_train)
-                
+
+                # Evaluate on test set
                 y_pred = grid_search.predict(X_test)
                 acc = accuracy_score(y_test, y_pred)
 
@@ -184,21 +162,28 @@ class ModelTraining:
                 print(f"\nClassification Report for {name}:\n")
                 print(classification_report(y_test, y_pred))
 
+                # Track best performing model
                 if acc > best_score:
                     best_score = acc
-                    best_overall_model = grid_search.best_estimator_
+                    best_overall_pipeline = grid_search.best_estimator_
                     best_model_name = name
 
-            except Exception as e:
-                logger.exception(f"Error training model {name}")
-                raise e
+            logger.info(f"Best Overall Model Found: {best_model_name} with Accuracy: {best_score:.4f}")
 
-        logger.info(f"Best Model Found: {best_model_name} with Accuracy: {best_score:.4f}")
-        
-        if best_overall_model is not None:
-            self.save_model(best_overall_model)
+            # Save the best fitted pipeline to disk
+            model_dir_path = Path(self.config.model_dir)
+            model_dir_path.mkdir(parents=True, exist_ok=True)
+            file_path = model_dir_path / self.config.model_file_name
 
-        return best_overall_model
+            logger.info(f"Saving best pipeline to {file_path}")
+            joblib.dump(best_overall_pipeline, file_path)
+            logger.info("Pipeline saved successfully")
+
+            return best_overall_pipeline
+
+        except Exception as e:
+            logger.exception("Error occurred during multi-model training/tuning")
+            raise e
 
 
 if __name__ == "__main__":
@@ -224,4 +209,4 @@ if __name__ == "__main__":
     model_trainer = ModelTraining(training_config)
     X_train, X_test, y_train, y_test = model_trainer.split_data(processed_df)
     
-    best_model = model_trainer.train_and_tune_models(X_train, y_train, X_test, y_test)
+    best_pipeline = model_trainer.train_and_tune_pipelines(X_train, y_train, X_test, y_test)

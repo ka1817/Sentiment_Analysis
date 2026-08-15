@@ -6,4 +6,7 @@ matplotlib
 tensorflow
 imblearn
 joblib
+fastapi
+uvicorn
+jinja2
 nltk

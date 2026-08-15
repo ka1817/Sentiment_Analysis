@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Review Sentiment Analyzer</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Sentiment Analysis Portal</h1>
+            <p>Analyze customer review polarity instantly using machine learning.</p>
+        </header>
+
+        <main class="card">
+            <div class="form-group">
+                <label for="reviewText">Enter Customer Review:</label>
+                <textarea id="reviewText" rows="5" placeholder="Type or paste your review here... (e.g., 'The product quality is amazing and delivery was super fast!')"></textarea>
+            </div>
+            
+            <button id="predictBtn" onclick="analyzeSentiment()">Analyze Sentiment</button>
+
+            <div id="loading" class="hidden">Processing prediction...</div>
+
+            <div id="resultContainer" class="hidden">
+                <h3>Result:</h3>
+                <div id="sentimentBadge" class="badge"></div>
+                <p id="confidenceText" class="hidden"></p>
+            </div>
+
+            <div id="errorContainer" class="hidden error-msg"></div>
+        </main>
+    </div>
+
+    <script>
+        async function analyzeSentiment() {
+            const reviewText = document.getElementById('reviewText').value.trim();
+            const btn = document.getElementById('predictBtn');
+            const loading = document.getElementById('loading');
+            const resultContainer = document.getElementById('resultContainer');
+            const sentimentBadge = document.getElementById('sentimentBadge');
+            const confidenceText = document.getElementById('confidenceText');
+            const errorContainer = document.getElementById('errorContainer');
+
+            // Reset UI states
+            resultContainer.classList.add('hidden');
+            errorContainer.classList.add('hidden');
+
+            if (!reviewText) {
+                errorContainer.innerText = "Please enter a valid review text.";
+                errorContainer.classList.remove('hidden');
+                return;
+            }
+
+            btn.disabled = true;
+            loading.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ review: reviewText })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || "Something went wrong during prediction.");
+                }
+
+                // Display sentiment result
+                sentimentBadge.innerText = data.sentiment;
+                sentimentBadge.className = "badge " + data.sentiment.toLowerCase();
+
+                if (data.confidence !== null) {
+                    confidenceText.innerText = `Confidence: ${data.confidence}%`;
+                    confidenceText.classList.remove('hidden');
+                } else {
+                    confidenceText.classList.add('hidden');
+                }
+
+                resultContainer.classList.remove('hidden');
+
+            } catch (err) {
+                errorContainer.innerText = err.message;
+                errorContainer.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                loading.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
