@@ -195,3 +195,4 @@ if __name__ == "__main__":
     )
 
     print("\nFinal Dataset Shape:", processed_df.shape)
+    print("Final columns:",processed_df.columns)
