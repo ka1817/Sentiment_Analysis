@@ -75,19 +75,16 @@ async def predict_sentiment(payload: ReviewRequest):
         raise HTTPException(status_code=400, detail="Review text cannot be empty.")
 
     try:
-        # Step 1: Clean raw input text using preprocessing logic
         temp_df = pd.DataFrame({"body": [text]})
         cleaned_df = preprocessor.preprocess_data(temp_df)
         
         if cleaned_df.empty:
-            processed_text = text.lower()  # Fallback if text is completely stripped
+            processed_text = text.lower()  
         else:
             processed_text = cleaned_df["clean_body"].iloc[0]
 
-        # Step 2: Make prediction directly using the loaded pipeline (TfidfVectorizer + Classifier)
         prediction = model.predict([processed_text])[0]
         
-        # Step 3: Extract prediction probabilities if available
         confidence = None
         if hasattr(model, "predict_proba"):
             probs = model.predict_proba([processed_text])[0]
