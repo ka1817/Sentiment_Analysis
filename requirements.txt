@@ -10,3 +10,6 @@ fastapi
 uvicorn
 jinja2
 nltk
+sqlalchemy 
+psycopg2-binary 
+python-dotenv
