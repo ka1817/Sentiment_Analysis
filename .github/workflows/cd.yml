@@ -6,7 +6,8 @@ on:
       - main
 
 jobs:
-  Build-and-Deploy:
+
+  Build:
     runs-on: ubuntu-latest
 
     steps:
@@ -30,8 +31,13 @@ jobs:
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/sentiment-analysis:latest
 
+
+  Deploy:
+    needs: Build
+    runs-on: ubuntu-latest
+
+    steps:
       - name: Trigger Deploy on Render
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
